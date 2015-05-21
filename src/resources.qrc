@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>examples/ex_01.hound</file>
+        <file>examples/ex_02.hound</file>
+    </qresource>
+</RCC>

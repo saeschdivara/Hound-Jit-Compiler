@@ -1,0 +1,13 @@
+# Current Package
+package org.example.foo
+
+# Import println function
+import hound.std.sys.process.fork
+
+fn foo_bar () ->
+    fork(
+        fn () ->
+            println("foo")
+    )
+
+foo_bar()

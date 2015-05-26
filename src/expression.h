@@ -101,6 +101,7 @@ public:
     bool isFunctionInvokation()  { return is(ExpressionType::FunctionInvokation); }
     bool isRawValue()  { return is(ExpressionType::RawData); }
     bool isCodeBlock()  { return is(ExpressionType::CodeBlock); }
+    bool isIf()  { return is(ExpressionType::If); }
 };
 
 
@@ -342,6 +343,25 @@ public:
 
     virtual ExpressionType type() const { return ExpressionType::If; }
     virtual QString toString() const { return "If"; }
+};
+
+
+class ElseExpression : public Expression
+{
+    QSharedPointer<Expression> m_block;
+public:
+    virtual ~ElseExpression() {}
+
+    void setBlock(QSharedPointer<Expression> bl) {
+        m_block = bl;
+    }
+
+    QSharedPointer<Expression> block() {
+        return m_block;
+    }
+
+    virtual ExpressionType type() const { return ExpressionType::Else; }
+    virtual QString toString() const { return "Else"; }
 };
 
 

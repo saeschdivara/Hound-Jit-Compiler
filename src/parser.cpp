@@ -421,6 +421,34 @@ QSharedPointer<Expression> parseIfExpr(QTextStream & stream, ParsingData * data)
         return getEmptyExpr();
     }
 
+    expr->setBlock(block);
+
+    qDebug() << "Block: " << block->toString();
+
+    consumeIndetention(stream, data);
+
+    return expr;
+}
+
+QSharedPointer<Expression> parseElseExpr(QTextStream & stream, ParsingData * data) {
+    QSharedPointer<ElseExpression> expr = QSharedPointer<ElseExpression>::create();
+
+    consumeIndetention(stream, data);
+
+    if ( !hasNewBlock(data) ) {
+        qDebug() << "After else comes a new block!";
+        return getEmptyExpr();
+    }
+
+    QSharedPointer<Expression> block = parseCodeBlockExpr(stream, data);
+
+    if ( isInValidExpr(block) ) {
+        qDebug() << "Invalid block parsed";
+        return getEmptyExpr();
+    }
+
+    expr->setBlock(block);
+
     qDebug() << "Block: " << block->toString();
 
     consumeIndetention(stream, data);
@@ -465,6 +493,10 @@ QSharedPointer<Expression> parseBlockExpr(QTextStream & stream, ParsingData * da
 
             case ExpressionType::If:
                 expr = parseIfExpr(stream, data);
+                break;
+
+            case ExpressionType::Else:
+                expr = parseElseExpr(stream, data);
                 break;
 
             default:
@@ -644,6 +676,10 @@ QSharedPointer<Expression> parseTopLevelExpr(QTextStream & stream, ParsingData *
                 expr = parseIfExpr(stream, data);
                 break;
 
+            case ExpressionType::Else:
+                expr = parseElseExpr(stream, data);
+                break;
+
             default:
                 break;
             }
@@ -659,7 +695,7 @@ QSharedPointer<Expression> parseTopLevelExpr(QTextStream & stream, ParsingData *
 
     // If the expression is null
     if ( expr.isNull() ) {
-        expr = QSharedPointer<Expression>::create();
+        expr = getEmptyExpr();
 
         qDebug() << data->lastChar;
 

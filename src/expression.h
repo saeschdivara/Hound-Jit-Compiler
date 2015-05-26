@@ -8,6 +8,8 @@
 #include <QtCore/QTextStream>
 #include <QtCore/QSharedPointer>
 
+#include "operators.h"
+
 /////////////////////////////////////////////////////
 
 enum ExpressionType {
@@ -35,6 +37,8 @@ enum ExpressionType {
     ElIf,
     Else,
 
+    BinaryExpr,
+
 };
 
 enum DataType {
@@ -47,6 +51,8 @@ enum DataType {
     Int64,
 
     // Floats
+    Float,
+    Double,
 
     // Extra types
     StringType,
@@ -60,7 +66,8 @@ struct ParsingData {
     QString identifier;
 
     // Reserved keywords
-    QHash<QString, uint> operators;
+    QHash<QString, LanguageOperator> operators;
+    QHash<LanguageOperator, uint> operatorPriorities;
     QHash<QString, ExpressionType> keywords;
 
     // Indetention
@@ -270,6 +277,71 @@ public:
     virtual QString toString() const {
         return "Raw Data: " + data().toString() + QString(" (") + getDataTypeName( dataType() ) + QString(")");
     }
+};
+
+
+class BinaryExpression : public Expression
+{
+    QSharedPointer<Expression> m_leftExpr;
+    QSharedPointer<Expression> m_rightExpr;
+    LanguageOperator m_operator;
+public:
+    virtual ~BinaryExpression() {}
+
+    void setLeftExpression(QSharedPointer<Expression> left) {
+        m_leftExpr = left;
+    }
+
+    QSharedPointer<Expression> leftExpression() {
+        return m_leftExpr;
+    }
+
+    void setRightExpression(QSharedPointer<Expression> right) {
+        m_rightExpr = right;
+    }
+
+    QSharedPointer<Expression> rightExpression() {
+        return m_rightExpr;
+    }
+
+    void setOperator(LanguageOperator op) {
+        m_operator = op;
+    }
+
+    LanguageOperator theOperator() {
+        return m_operator;
+    }
+
+    virtual ExpressionType type() const { return ExpressionType::BinaryExpr; }
+    virtual QString toString() const { return "Binary"; }
+};
+
+
+class IfExpression : public Expression
+{
+    QSharedPointer<BinaryExpression> m_condition;
+    QSharedPointer<Expression> m_block;
+public:
+    virtual ~IfExpression() {}
+
+    void setCondition(QSharedPointer<BinaryExpression> con) {
+        m_condition = con;
+    }
+
+    QSharedPointer<BinaryExpression> condition() {
+        return m_condition;
+    }
+
+    void setBlock(QSharedPointer<Expression> bl) {
+        m_block = bl;
+    }
+
+    QSharedPointer<Expression> block() {
+        return m_block;
+    }
+
+    virtual ExpressionType type() const { return ExpressionType::If; }
+    virtual QString toString() const { return "If"; }
 };
 
 

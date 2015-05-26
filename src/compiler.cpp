@@ -9,7 +9,7 @@ VmCompiler::VmCompiler(QObject *parent) : QObject(parent)
 {
 }
 
-void VmCompiler::compile() {
+void VmCompiler::compile(QList<QSharedPointer<Expression> > expressions) {
     JitRuntime runtime;
     X86Compiler c(&runtime);
 

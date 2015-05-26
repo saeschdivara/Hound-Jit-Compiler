@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "operators.h"
 
 
 Parser::Parser(const QString fileName, QObject *parent) : QObject(parent),
@@ -15,6 +16,13 @@ bool isVariableConform(QChar c, const QString & identifier) {
         return c.isLetter() || c == '_';
     else
         return c.isLetterOrNumber() || c == '_';
+}
+
+bool isNumberConform(QChar c, const QString & identifier) {
+    if ( identifier.isEmpty() )
+        return c.isNumber() || c == '.';
+    else
+        return c.isNumber() || ( !identifier.contains(".") && c == '.' );
 }
 
 bool consumeSpace(QTextStream & stream, ParsingData * data, bool updateIndetention = false) {
@@ -47,6 +55,14 @@ void consumeIndetention(QTextStream & stream, ParsingData * data) {
     while ( isReturnCharacter(data->lastChar) ) {
         consumeSpace(stream, data, true);
     }
+}
+
+bool isInValidExpr(QSharedPointer<Expression> expr) {
+    return expr.isNull() || expr->isUnknown();
+}
+
+QSharedPointer<Expression> getEmptyExpr() {
+    return QSharedPointer<Expression>::create();
 }
 
 QSharedPointer<Expression> parseCommentExpr(QTextStream & stream, ParsingData * data) {
@@ -139,6 +155,31 @@ QSharedPointer<Expression> parseStringExpr(QTextStream & stream, ParsingData * d
     return expr;
 }
 
+QSharedPointer<Expression> parseNumberExpr(QTextStream & stream, ParsingData * data) {
+    QSharedPointer<RawDataExpression> expr = QSharedPointer<RawDataExpression>::create();
+
+    data->identifier.clear();
+
+    data->identifier += data->lastChar;
+    stream >> data->lastChar;
+
+    while ( isNumberConform(data->lastChar, data->identifier) ) {
+        data->identifier += data->lastChar;
+        stream >> data->lastChar;
+    }
+
+    if ( data->identifier.contains(".") ) {
+        expr->setDataType(DataType::Float);
+        expr->setData(data->identifier.toFloat());
+    }
+    else {
+        expr->setDataType(DataType::Int32);
+        expr->setData(data->identifier.toInt());
+    }
+
+    return expr;
+}
+
 QSharedPointer<Expression> parseParameterExpr(QTextStream & stream, ParsingData * data) {
     QSharedPointer<Expression> expr = QSharedPointer<Expression>::create();
 
@@ -193,6 +234,11 @@ QSharedPointer<Expression> parseParameterExpr(QTextStream & stream, ParsingData 
         expr = parseStringExpr(stream, data);
     }
 
+    // Numbers
+    else if ( isNumberConform(data->lastChar, data->identifier) ) {
+        expr = parseNumberExpr(stream, data);
+    }
+
     return expr;
 }
 
@@ -220,7 +266,7 @@ QSharedPointer<Expression> parseFunctionInvokationExpr(QTextStream & stream, Par
 
     if ( data->lastChar != ')' && data->lastUnknownChar != ')' ) {
         qDebug() << "Call didn't end with )";
-        return QSharedPointer<Expression>::create();
+        return getEmptyExpr();
     }
 
     // Consume char after )
@@ -229,13 +275,161 @@ QSharedPointer<Expression> parseFunctionInvokationExpr(QTextStream & stream, Par
     return expr;
 }
 
+bool isPossibleOperator(ParsingData * data) {
+
+    if ( data->identifier.isEmpty() ) {
+        //
+        for( const QString & key : data->operators.keys() ) {
+            if ( key.startsWith(data->lastChar) ) {
+                return true;
+            }
+        }
+    }
+    else {
+        QString searchString = data->identifier + data->lastChar;
+        //
+        for( const QString & key : data->operators.keys() ) {
+            if ( key.startsWith(searchString) ) {
+                return true;
+            }
+        }
+    }
+
+
+    return false;
+}
+
+
+LanguageOperator parseOperator(QTextStream & stream, ParsingData * data) {
+    LanguageOperator myOperator;
+    data->identifier.clear();
+
+    // stream >> data->lastChar;
+
+    while ( isPossibleOperator(data) ) {
+        data->identifier += data->lastChar;
+        stream >> data->lastChar;
+    }
+
+    myOperator = data->operators.value(data->identifier, LanguageOperator::UnknownOperator);
+
+    qDebug() << "Operator: " << myOperator;
+
+    return myOperator;
+}
+
+QSharedPointer<Expression> parsePossibleComparsionExpr(QTextStream & stream, ParsingData * data) {
+    // - Variables
+    // - Integers
+    // - Floats
+    // - Strings
+
+    data->identifier.clear();
+
+    if ( isVariableConform( data->lastChar, data->identifier ) ) {
+        return parseVariableExpr(stream, data);
+    }
+    else if ( data->lastChar == '"' ) {
+        return parseStringExpr(stream, data);
+    }
+    else if ( isNumberConform(data->lastChar, data->identifier)  ) {
+        return parseNumberExpr(stream, data);
+    }
+
+    return getEmptyExpr();
+}
+
+
+QSharedPointer<BinaryExpression> parseBinaryExpr(QTextStream & stream, ParsingData * data) {
+    QSharedPointer<BinaryExpression> expr = QSharedPointer<BinaryExpression>::create();
+
+    data->identifier.clear();
+    //
+    stream >> data->lastChar;
+
+    QSharedPointer<Expression> left = parsePossibleComparsionExpr(stream, data);
+
+    if ( isInValidExpr(left) ) {
+        qDebug() << "Invalid left expression";
+        return getEmptyExpr().dynamicCast<BinaryExpression>();
+    }
+
+    qDebug() << "left expression: " << left->toString();
+
+    consumeSpace(stream, data);
+
+    LanguageOperator myOperator = parseOperator(stream, data);
+
+    if ( myOperator == LanguageOperator::UnknownOperator ) {
+        qDebug() << "This operator '" << data->identifier << "' is unknown";
+        return getEmptyExpr().dynamicCast<BinaryExpression>();
+    }
+
+    consumeSpace(stream, data);
+
+    QSharedPointer<Expression> right = parsePossibleComparsionExpr(stream, data);
+
+    if ( isInValidExpr(right) ) {
+        qDebug() << "Invalid right expression";
+        return getEmptyExpr().dynamicCast<BinaryExpression>();
+    }
+
+    qDebug() << "right expression: " << right->toString();
+
+    expr->setLeftExpression(left);
+    expr->setOperator(myOperator);
+    expr->setRightExpression(right);
+
+    return expr;
+}
+
 QSharedPointer<Expression> parseIfExpr(QTextStream & stream, ParsingData * data) {
-    QSharedPointer<Expression> expr = QSharedPointer<Expression>::create();
+    QSharedPointer<IfExpression> expr = QSharedPointer<IfExpression>::create();
+
+    QSharedPointer<BinaryExpression> condition = parseBinaryExpr(stream, data);
+    if ( condition.isNull() || condition->isUnknown() ) {
+        qDebug() << "Could not parse binary condition expression";
+        return getEmptyExpr();
+    }
+
+    consumeSpace(stream, data);
+
+    data->identifier.clear();
+
+    // Read identifier
+    while ( isVariableConform( data->lastChar, data->identifier ) ) {
+        data->identifier += data->lastChar;
+        stream >> data->lastChar;
+    }
+
+    if ( data->identifier.toLower() != "then" ) {
+        qDebug() << "Expected then after binary expression";
+        return getEmptyExpr();
+    }
+
+    consumeIndetention(stream, data);
+
+    if ( !hasNewBlock(data) ) {
+        qDebug() << "After then comes a new block!";
+        return getEmptyExpr();
+    }
+
+    QSharedPointer<Expression> block = parseCodeBlockExpr(stream, data);
+
+    if ( isInValidExpr(block) ) {
+        qDebug() << "Invalid block parsed";
+        return getEmptyExpr();
+    }
+
+    qDebug() << "Block: " << block->toString();
+
+    consumeIndetention(stream, data);
+
     return expr;
 }
 
 QSharedPointer<Expression> parseBlockExpr(QTextStream & stream, ParsingData * data) {
-    QSharedPointer<Expression> expr = QSharedPointer<Expression>::create();
+    QSharedPointer<Expression> expr = getEmptyExpr();
 
     if ( data->lastChar == '#' ) {
         expr = parseCommentExpr(stream, data);
@@ -285,6 +479,9 @@ QSharedPointer<Expression> parseBlockExpr(QTextStream & stream, ParsingData * da
             expr.dynamicCast<VariableExpression>()->setName(data->identifier);
         }
     }
+    else if ( isNumberConform(data->lastChar, data->identifier) ) {
+        expr = parseNumberExpr(stream, data);
+    }
 
     return expr;
 }
@@ -294,7 +491,12 @@ QSharedPointer<Expression> parseCodeBlockExpr(QTextStream & stream, ParsingData 
 
     QSharedPointer<Expression> codeExpr = parseBlockExpr(stream, data);
 
-    while ( !codeExpr.isNull() && !codeExpr->isUnknown() ) {
+    if ( isInValidExpr(codeExpr) ) {
+        qDebug() << "Invalid code block";
+        return getEmptyExpr();
+    }
+
+    while ( !isInValidExpr(codeExpr) ) {
         expr->addExpression(codeExpr);
         qDebug() << "Block: " << codeExpr->toString();
         codeExpr = parseBlockExpr(stream, data);
@@ -376,7 +578,7 @@ QSharedPointer<Expression> parseFunctionExpr(QTextStream & stream, ParsingData *
 
     if ( data->lastChar != '>' ){
         qDebug() << "-> is missing";
-        return QSharedPointer<Expression>::create();
+        return getEmptyExpr();
     }
 
     // Check for new function block
@@ -385,13 +587,13 @@ QSharedPointer<Expression> parseFunctionExpr(QTextStream & stream, ParsingData *
 
     if ( !hasNewBlock(data) ) {
         qDebug() << "Function expects a function body with enough indetention";
-        return QSharedPointer<Expression>::create();
+        return getEmptyExpr();
     }
 
     QSharedPointer<Expression> codeBlock = parseCodeBlockExpr(stream, data);
     if ( codeBlock.isNull() ) {
         qDebug() << "Could not parse function block";
-        return QSharedPointer<Expression>::create();
+        return getEmptyExpr();
     }
 
     expr->setCode(codeBlock);
@@ -484,18 +686,18 @@ QList< QSharedPointer<Expression> > Parser::parse()
     data.currentIndent = 0;
 
     // Set operators
-    data.operators["in"] = 0;
-    data.operators["not"] = 0;
-    data.operators["and"] = 0;
-    data.operators["or"] = 0;
-    data.operators["xor"] = 0;
-    data.operators["<"] = 0;
-    data.operators[">"] = 0;
-    data.operators["+"] = 0;
-    data.operators["-"] = 0;
-    data.operators["*"] = 0;
-    data.operators["/"] = 0;
-    data.operators["**"] = 0;
+    data.operators["in"] = LanguageOperator::InOperator;
+    data.operators["not"] = LanguageOperator::NotOperator;
+    data.operators["and"] = LanguageOperator::AndOperator;
+    data.operators["or"] = LanguageOperator::OrOperator;
+    data.operators["xor"] = LanguageOperator::XorOperator;
+    data.operators["<"] = LanguageOperator::LessOperator;
+    data.operators[">"] = LanguageOperator::GreaterOperator;
+    data.operators["+"] = LanguageOperator::PlusOperator;
+    data.operators["-"] = LanguageOperator::MinusOperator;
+    data.operators["*"] = LanguageOperator::MultiplyOperator;
+    data.operators["/"] = LanguageOperator::DivideOperator;
+    data.operators["**"] = LanguageOperator::PowerOfOperator;
 
     // Set keywords
     data.keywords["package"] = ExpressionType::Package;

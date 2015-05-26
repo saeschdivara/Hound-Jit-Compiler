@@ -27,5 +27,7 @@ private:
 
 QSharedPointer<Expression> parseFunctionExpr(QTextStream & stream, ParsingData * data);
 QSharedPointer<Expression> parseFunctionInvokationExpr(QTextStream & stream, ParsingData * data);
+QSharedPointer<Expression> parseBlockExpr(QTextStream & stream, ParsingData * data);
+QSharedPointer<Expression> parseCodeBlockExpr(QTextStream & stream, ParsingData * data);
 
 #endif // PARSER_H

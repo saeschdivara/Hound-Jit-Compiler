@@ -35,7 +35,8 @@ HEADERS += \
     expression.h \
     parser.h \
     compiler.h \
-    virtualmachine.h
+    virtualmachine.h \
+    operators.h
 
 RESOURCES += \
     resources.qrc
